@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All-State Football Info</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        /* Allow horizontal scroll on small screens if table is wide */
+        .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app" class="min-h-screen p-4">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-3xl font-bold text-gray-900 mb-4">All-State Football Info</h1>
+            
+            <div class="bg-white rounded-md p-4 mb-6">
+                <ul class="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                    <li>This page only shows information on players. You still must vote in the Google Form sent to you.</li>
+                    <li>Use the dropdown menu above the table to filter players by position or player of the year nominees.</li>
+                    <li>Columns are sortable. Click on the header to sort.</li>
+                    <li>More stats and info are available under the <strong>View More</strong> link.
+                    <li>Tip: Hide players you've already voted for</li>
+                </ul>
+            </div>
+            
+            <div id="loading" class="flex items-center justify-center py-12">
+                <div class="text-lg text-gray-600">Loading player data...</div>
+            </div>
+
+            <div id="content" style="display: none;">
+                <!-- Filter Dropdown -->
+                <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+                    <label for="positionFilter" class="block text-sm font-medium text-gray-700 mb-2">Filter by Position:</label>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <select id="positionFilter" onchange="handleFilterChange()" class="block w-full sm:w-64 rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm bg-gray-50 text-gray-900">
+                            <option value="">Show All Players</option>
+                            <option value="poy">Player of the Year</option>
+                            <option value="Quarterback">Quarterback</option>
+                            <option value="Running back">Running Back</option>
+                            <option value="Receiver/tight end">Receiver/Tight End</option>
+                            <option value="Offensive line">Offensive Line</option>
+                            <option value="Defensive line">Defensive Line</option>
+                            <option value="Linebacker">Linebacker</option>
+                            <option value="Defensive back">Defensive Back</option>
+                            <option value="Kicker">Kicker</option>
+                            <option value="Punter">Punter</option>
+                        </select>
+                        
+                        <button onclick="clearFilters()" id="clearBtn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm font-medium transition-colors" style="display: none;">
+                            Reset Filter
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results count -->
+                <div class="flex items-center justify-between mb-4">
+                    <div id="resultsCount" class="text-sm text-gray-600"></div>
+                </div>
+
+                <!-- Table -->
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr id="tableHead">
+                                    <!-- Headers are now injected via JS -->
+                                </tr>
+                             </thead>
+                            <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="noResults" class="text-center py-8 text-gray-500" style="display: none;">
+                    No players found matching the selected filter.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                <h2 id="modalTitle" class="text-2xl font-bold text-gray-900"></h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="px-6 py-4">
+                <div id="modalContent" class="flex flex-col gap-4">
+                </div>
+            </div>
+
+            <div class="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <button onclick="closeModal()" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dataUrl = "https://script.googleusercontent.com/a/macros/idahostatesman.com/echo?user_content_key=AehSKLiFyB_-hjShhwQtj94sdF5w0fnH1RyTtrGhaS-6SEkEO5NnAepOyL07ySzGNHZwusDONoO1z_QayjOARQ5MgtiM-VxbiyKDxh6h3rvJXJPdu3SfzxtQh5O2NCn5HPQ3niCXnEcdeEv8XYvZ0BbFmzucNBjLHu4qmPZQ6eV3jBVhx2Oi7gk1SMuEi1jpjXGPuLLaOImVqz45s2o8faKqTahOJbkrA7fbS7bc7aPTxgalvmt4NU_E6kN8BDgXsd6NuYgFJyWYA53LbaNP86-hYJ3pB-JJHT5sG6zRtGKcDAG72e8dMyRWGJNkB4voYw&lib=M5HoHm3NqZ6ikiNE1DtJu5aaDfETvgIFd";
+        
+        let allData = [];
+        let filteredData = [];
+        let hiddenPlayers = new Set();
+        let currentCategory = ''; // Tracks the active filter value (e.g., 'Quarterback')
+        let sortColumn = null;
+        let sortDirection = 'asc';
+
+        async function fetchData() {
+            try {
+                const response = await fetch(dataUrl);
+                const json = await response.json();
+                
+                let data = json;
+                if (json.data && Array.isArray(json.data)) {
+                    data = json.data;
+                } else if (json.players && Array.isArray(json.players)) {
+                    data = json.players;
+                } else if (!Array.isArray(json)) {
+                    console.error('Unexpected data format:', json);
+                    data = Object.values(json);
+                }
+                
+                // Assign a unique ID to each player for hiding functionality
+                allData = data.map((player, index) => ({
+                    ...player,
+                    _id: index
+                }));
+                
+                filteredData = allData;
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                
+                renderTable();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('loading').innerHTML = '<div class="text-lg text-red-600">Error loading data: ' + error.message + '<br>Please check the browser console.</div>';
+            }
+        }
+
+        function handleFilterChange() {
+            const select = document.getElementById('positionFilter');
+            const value = select.value;
+            const clearBtn = document.getElementById('clearBtn');
+            clearBtn.style.display = value ? 'block' : 'none';
+            
+            currentCategory = value;
+            
+            // RESET sorting when filter changes so it doesn't auto-sort
+            sortColumn = null;
+            sortDirection = 'asc';
+            
+            applyFilters(value);
+        }
+
+        function clearFilters() {
+            const select = document.getElementById('positionFilter');
+            select.value = ""; 
+            currentCategory = "";
+            document.getElementById('clearBtn').style.display = 'none';
+            
+            // Reset sorting on clear as well
+            sortColumn = null;
+            sortDirection = 'asc';
+            
+            applyFilters("");
+        }
+        
+        function hidePlayer(id) {
+            hiddenPlayers.add(id);
+            applyFilters(currentCategory);
+        }
+        
+        function restoreHidden() {
+            hiddenPlayers.clear();
+            applyFilters(currentCategory);
+        }
+
+        function applyFilters(filterValue) {
+            let result = [...allData];
+
+            // Filter out hidden players
+            result = result.filter(player => !hiddenPlayers.has(player._id));
+
+            if (filterValue === 'poy') {
+                result = result.filter(player => 
+                    player['Player of the Year nomination'] === 'Yes, player of the year'
+                );
+            } else if (filterValue) {
+                result = result.filter(player => 
+                    player['Position'] === filterValue
+                );
+            }
+
+            filteredData = result;
+            renderTable();
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                if (sortDirection === 'desc') {
+                    sortDirection = 'asc';
+                } else {
+                    // Third click: Reset to default
+                    sortColumn = null;
+                    sortDirection = 'asc';
+                    applyFilters(currentCategory);
+                    return;
+                }
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            
+            applySorting();
+            renderTable();
+        }
+
+        function applySorting() {
+            if (!sortColumn) return;
+
+            const columnMap = {
+                // Default View Keys
+                'name': "Player's name",
+                'school': 'School',
+                'year': 'Year in school',
+                'jersey': 'Jersey number',
+                'all_conf': 'All-conference awards this year',
+                
+                // Quarterback
+                'gp_qb': 'QB Games played',
+                'pass_yards': 'Passing yards',
+                'pass_tds': 'Passing TDs',
+                'ints': 'Interceptions thrown',
+                'rush_yards_qb': 'QB Rushing yards',
+                'rush_tds_qb': 'QB Rushing TDs',
+
+                // Running Back
+                'rb_gp': 'RB Games played',
+                'rb_rush_yds': 'RB Rushing yards',
+                'rb_rush_tds': 'RB Rushing TDs',
+                'rb_rec_yds': 'RB Receiving yards',
+                'rb_rec_tds': 'RB Receiving TDs',
+
+                // Receiver / TE
+                'wr_pos': 'Wide receiver or tight end',
+                'wr_gp': 'REC Games played',
+                'wr_rec': 'REC Receptions',
+                'wr_yds': 'REC Receiving yards',
+                'wr_tds': 'REC Receiving TDs',
+                'wr_rush_yds': 'REC Rushing yards',
+                'wr_rush_tds': 'REC Rushing TDs',
+
+                // OL
+                'ol_pos': 'OL Position',
+                'ol_gp': 'OL Games played',
+                'ol_pancake': 'Pancake blocks',
+                'ol_sacks': 'Sacks allowed',
+                'ol_team_rush': 'Team rushing yards',
+                'ol_team_pass': 'Team passing yards',
+
+                // DL
+                'dl_pos': 'DL Position',
+                'dl_gp': 'DL Games played',
+                'dl_tackles': 'DL Total tackles',
+                'dl_sacks': 'DL Sacks',
+                'dl_tfl': 'DL Tackles-for-loss',
+                'dl_ff': 'DL Forced fumbles',
+                'dl_int': 'DL Interceptions',
+
+                // LB
+                'lb_pos': 'LB Position',
+                'lb_gp': 'LB Games played',
+                'lb_tackles': 'LB Total tackles',
+                'lb_sacks': 'LB Sacks',
+                'lb_tfl': 'LB Tackles-for-loss',
+                'lb_ff': 'LB Forced fumbles',
+                'lb_int': 'LB Interceptions',
+
+                // DB
+                'db_pos': 'DB Position',
+                'db_gp': 'DB Games played',
+                'db_tackles': 'DB Total tackles',
+                'db_sacks': 'DB Sacks',
+                'db_tfl': 'DB Tackles-for-loss',
+                'db_ff': 'DB Forced fumbles',
+                'db_int': 'DB Interceptions',
+                'db_pbu': 'DB Pass breakups',
+
+                // Kicker
+                'k_made': 'Field goals made',
+                'k_att': 'Field goals attempted',
+                'k_long': 'Longest field goal',
+                'k_pat_made': 'PATs made',
+                'k_pat_att': 'PATs attempted',
+                'k_tb': 'Touchbacks',
+
+                // Punter
+                'p_avg': 'Average yards per punt',
+                'p_long': 'Longest punt',
+                'p_in20': 'Punts downed inside the 20'
+            };
+            
+            const actualColumn = columnMap[sortColumn];
+            if (!actualColumn) return;
+            
+            filteredData.sort((a, b) => {
+                let aVal = a[actualColumn];
+                let bVal = b[actualColumn];
+                
+                // treat null/undefined/empty as blank string or 0 for stats
+                if (aVal === null || aVal === undefined || aVal === '') aVal = '';
+                if (bVal === null || bVal === undefined || bVal === '') bVal = '';
+
+                // Try numeric sort
+                const aNum = parseFloat(aVal);
+                const bNum = parseFloat(bVal);
+
+                // If both are valid numbers, sort numerically
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // String comparison fallback
+                const aStr = String(aVal).toLowerCase();
+                const bStr = String(bVal).toLowerCase();
+                
+                if (sortDirection === 'asc') {
+                    return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+                } else {
+                    return bStr < aStr ? -1 : bStr > aStr ? 1 : 0;
+                }
+            });
+        }
+
+        function updateSortIndicators() {
+            // All possible sort keys
+            const cols = [
+                'name','school','year','jersey','all_conf',
+                'gp_qb','pass_yards','pass_tds','ints','rush_yards_qb','rush_tds_qb',
+                'rb_gp','rb_rush_yds','rb_rush_tds','rb_rec_yds','rb_rec_tds',
+                'wr_pos','wr_gp','wr_rec','wr_yds','wr_tds','wr_rush_yds','wr_rush_tds',
+                'ol_pos','ol_gp','ol_pancake','ol_sacks','ol_team_rush','ol_team_pass',
+                'dl_pos','dl_gp','dl_tackles','dl_sacks','dl_tfl','dl_ff','dl_int',
+                'lb_pos','lb_gp','lb_tackles','lb_sacks','lb_tfl','lb_ff','lb_int',
+                'db_pos','db_gp','db_tackles','db_sacks','db_tfl','db_ff','db_int','db_pbu',
+                'k_made','k_att','k_long','k_pat_made','k_pat_att','k_tb',
+                'p_avg','p_long','p_in20'
+            ];
+            
+            cols.forEach(col => {
+                const indicator = document.getElementById('sort-' + col);
+                if (!indicator) return;
+                
+                if (col === sortColumn) {
+                    indicator.textContent = sortDirection === 'asc' ? '▲' : '▼';
+                    indicator.className = 'text-blue-600 ml-1 text-xs';
+                } else {
+                    // Inactive state
+                    indicator.textContent = '▼';
+                    indicator.className = 'text-gray-300 ml-1 text-xs opacity-50';
+                }
+            });
+        }
+
+        function createHeaderCell(key, label, widthClass = '') {
+            return `
+                <th onclick="sortTable('${key}')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 ${widthClass}">
+                    ${label} <span id="sort-${key}" class="text-gray-300 ml-1 text-xs opacity-50">▼</span>
+                </th>
+            `;
+        }
+
+        function renderTableHead() {
+            const thead = document.getElementById('tableHead');
+            let html = '';
+
+            // Common start: [Hide Col] [Player] [School] [#]
+            const commonStart = `
+                <th class="px-2 py-3 w-10 text-center"></th>
+                ${createHeaderCell('name', 'Player')}
+                ${createHeaderCell('school', 'School')}
+                ${createHeaderCell('jersey', '#')}
+            `;
+            
+            if (currentCategory === 'Quarterback') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('gp_qb', 'GP')}
+                    ${createHeaderCell('pass_yards', 'Pass Yds')}
+                    ${createHeaderCell('pass_tds', 'Pass TDs')}
+                    ${createHeaderCell('ints', 'INTs')}
+                    ${createHeaderCell('rush_yards_qb', 'Rush Yds')}
+                    ${createHeaderCell('rush_tds_qb', 'Rush TDs')}
+                `;
+            } else if (currentCategory === 'Running back') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('rb_gp', 'GP')}
+                    ${createHeaderCell('rb_rush_yds', 'Rush Yds')}
+                    ${createHeaderCell('rb_rush_tds', 'Rush TDs')}
+                    ${createHeaderCell('rb_rec_yds', 'Rec Yds')}
+                    ${createHeaderCell('rb_rec_tds', 'Rec TDs')}
+                `;
+            } else if (currentCategory === 'Receiver/tight end') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('wr_pos', 'Pos')}
+                    ${createHeaderCell('wr_gp', 'GP')}
+                    ${createHeaderCell('wr_rec', 'Rec')}
+                    ${createHeaderCell('wr_yds', 'Yards')}
+                    ${createHeaderCell('wr_tds', 'TDs')}
+                    ${createHeaderCell('wr_rush_yds', 'Rush Yds')}
+                    ${createHeaderCell('wr_rush_tds', 'Rush TDs')}
+                `;
+            } else if (currentCategory === 'Offensive line') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('ol_gp', 'GP')}
+                    ${createHeaderCell('ol_pancake', 'Pancake')}
+                    ${createHeaderCell('ol_sacks', 'Sacks All.')}
+                    ${createHeaderCell('ol_team_rush', 'Team Rush')}
+                    ${createHeaderCell('ol_team_pass', 'Team Pass')}
+                `;
+            } else if (currentCategory === 'Defensive line') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('dl_gp', 'GP')}
+                    ${createHeaderCell('dl_tackles', 'Tackles')}
+                    ${createHeaderCell('dl_sacks', 'Sacks')}
+                    ${createHeaderCell('dl_tfl', 'TFLs')}
+                    ${createHeaderCell('dl_ff', 'FF')}
+                    ${createHeaderCell('dl_int', 'INTs')}
+                `;
+            } else if (currentCategory === 'Linebacker') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('lb_gp', 'GP')}
+                    ${createHeaderCell('lb_tackles', 'Tackles')}
+                    ${createHeaderCell('lb_sacks', 'Sacks')}
+                    ${createHeaderCell('lb_tfl', 'TFLs')}
+                    ${createHeaderCell('lb_ff', 'FF')}
+                    ${createHeaderCell('lb_int', 'INTs')}
+                `;
+            } else if (currentCategory === 'Defensive back') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('db_gp', 'GP')}
+                    ${createHeaderCell('db_tackles', 'Tackles')}
+                    ${createHeaderCell('db_sacks', 'Sacks')}
+                    ${createHeaderCell('db_tfl', 'TFLs')}
+                    ${createHeaderCell('db_ff', 'FF')}
+                    ${createHeaderCell('db_int', 'INTs')}
+                    ${createHeaderCell('db_pbu', 'PBUs')}
+                `;
+            } else if (currentCategory === 'Kicker') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('k_made', 'Made')}
+                    ${createHeaderCell('k_att', 'Att')}
+                    ${createHeaderCell('k_long', 'Long')}
+                    ${createHeaderCell('k_pat_made', 'PAT Made')}
+                    ${createHeaderCell('k_pat_att', 'PAT Att')}
+                    ${createHeaderCell('k_tb', 'Touchbacks')}
+                `;
+            } else if (currentCategory === 'Punter') {
+                html = `
+                    ${commonStart}
+                    ${createHeaderCell('p_avg', 'Avg')}
+                    ${createHeaderCell('p_long', 'Long')}
+                    ${createHeaderCell('p_in20', 'Inside 20')}
+                `;
+            } else {
+                // Default / POY View
+                html = `
+                    <th class="px-2 py-3 w-10 text-center"></th>
+                    ${createHeaderCell('name', 'Player')}
+                    ${createHeaderCell('school', 'School')}
+                    ${createHeaderCell('jersey', '#')}
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                    ${createHeaderCell('year', 'Year')}
+                `;
+            }
+            
+            // Add All-Conf and Details columns to all views
+            html += `
+                ${createHeaderCell('all_conf', 'All-Conf')}
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+            `;
+            thead.innerHTML = html;
+        }
+
+        function safeVal(val) {
+            return (val !== undefined && val !== null) ? val : '';
+        }
+
+        function renderTable() {
+             renderTableHead();
+             
+             const tbody = document.getElementById('tableBody');
+             const resultsCount = document.getElementById('resultsCount');
+             const noResults = document.getElementById('noResults');
+             
+             let hiddenCount = hiddenPlayers.size;
+             let countText = `Showing ${filteredData.length} of ${allData.length} players`;
+             
+             if (hiddenCount > 0) {
+                 countText += ` <span class="ml-2 text-gray-400">(${hiddenCount} hidden - <button onclick="restoreHidden()" class="underline hover:text-blue-600">Show all</button>)</span>`;
+             }
+             
+             resultsCount.innerHTML = countText;
+             
+             if (filteredData.length === 0) {
+                 tbody.innerHTML = '';
+                 noResults.style.display = 'block';
+                 return;
+             }
+             
+             noResults.style.display = 'none';
+             
+             tbody.innerHTML = filteredData.map((player, idx) => {
+                 const rowClass = 'hover:bg-gray-50';
+                 const playerName = safeVal(player["Player's name"]);
+                 const school = safeVal(player['School']);
+                 const jersey = safeVal(player['Jersey number']);
+                 
+                 // Hide Button Cell
+                 const hideCell = `
+                     <td class="px-2 py-3 whitespace-nowrap text-sm text-center">
+                        <button onclick="hidePlayer(${player._id})" class="text-xs text-red-500 hover:text-red-700 font-medium" title="Hide this player">Hide</button>
+                     </td>
+                 `;
+                 
+                 let rowContent = '';
+                 
+                 // Generate middle columns based on category
+                 if (currentCategory === 'Quarterback') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['QB Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Passing yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Passing TDs'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Interceptions thrown'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['QB Rushing yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['QB Rushing TDs'])}</td>
+                    `;
+                 } else if (currentCategory === 'Running back') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['RB Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['RB Rushing yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['RB Rushing TDs'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['RB Receiving yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['RB Receiving TDs'])}</td>
+                    `;
+                 } else if (currentCategory === 'Receiver/tight end') {
+                    let posDisplay = safeVal(player['Wide receiver or tight end']);
+                    if (posDisplay === 'Wide receiver') posDisplay = 'WR';
+                    if (posDisplay === 'Tight end') posDisplay = 'TE';
+                    
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${posDisplay}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Receptions'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Receiving yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Receiving TDs'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Rushing yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['REC Rushing TDs'])}</td>
+                    `;
+                 } else if (currentCategory === 'Offensive line') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['OL Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Pancake blocks'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Sacks allowed'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Team rushing yards'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Team passing yards'])}</td>
+                    `;
+                 } else if (currentCategory === 'Defensive line') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Total tackles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Sacks'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Tackles-for-loss'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Forced fumbles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DL Interceptions'])}</td>
+                    `;
+                 } else if (currentCategory === 'Linebacker') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Total tackles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Sacks'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Tackles-for-loss'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Forced fumbles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['LB Interceptions'])}</td>
+                    `;
+                 } else if (currentCategory === 'Defensive back') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Games played'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Total tackles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Sacks'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Tackles-for-loss'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Forced fumbles'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Interceptions'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['DB Pass breakups'])}</td>
+                    `;
+                 } else if (currentCategory === 'Kicker') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Field goals made'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Field goals attempted'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Longest field goal'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['PATs made'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['PATs attempted'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Touchbacks'])}</td>
+                    `;
+                 } else if (currentCategory === 'Punter') {
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Average yards per punt'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Longest punt'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Punts downed inside the 20'])}</td>
+                    `;
+                 } else {
+                    // Default View
+                    rowContent = `
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Position'])}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${safeVal(player['Year in school'])}</td>
+                    `;
+                 }
+
+                 const allConfVal = safeVal(player['All-conference awards this year']);
+
+                 return `
+                 <tr class="${rowClass} transition-colors">
+                     ${hideCell}
+                     <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${playerName}</td>
+                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${school}</td>
+                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${jersey}</td>
+                     ${rowContent}
+                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700 max-w-xs truncate" title="${allConfVal}">${allConfVal}</td>
+                     <td class="px-4 py-3 whitespace-nowrap text-sm">
+                         <button onclick="openModal(${idx})" class="text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-3 py-1 rounded hover:bg-blue-100">
+                             View More
+                         </button>
+                     </td>
+                 </tr>
+                 `;
+             }).join('');
+             
+             updateSortIndicators();
+         }
+
+        function openModal(index) {
+            const player = filteredData[index];
+            document.getElementById('modalTitle').textContent = player["Player's name"] || 'Player Details';
+            
+            const fieldOrder = [
+                "Coach's comment",
+                "Jersey number",
+                "Height",
+                "Weight",
+                
+                // --- QB ---
+                "QB Games played",
+                "Pass completions",
+                "Pass attempts",
+                "Passing yards",
+                "Passing TDs",
+                "Interceptions thrown",
+                "QB Rushing attempts",
+                "QB Rushing yards",
+                "QB Rushing TDs",
+                "QB Other",
+                
+                // --- RB ---
+                "RB Games played",
+                "RB Rushing attempts",
+                "RB Rushing yards",
+                "RB Rushing TDs",
+                "RB Receptions",
+                "RB Receiving yards",
+                "RB Receiving TDs",
+                "RB Other",
+                
+                // --- REC ---
+                "REC Games played",
+                "REC Receptions",
+                "REC Receiving yards",
+                "REC Receiving TDs",
+                "REC Rushing attempts",
+                "REC Rushing yards",
+                "REC Rushing TDs",
+                "REC Other",
+                
+                // --- OL ---
+                "OL Games played",
+                "OL Position",
+                "Pancake blocks",
+                "Sacks allowed",
+                "Team rushing yards",
+                "Team passing yards",
+                "OL Other",
+                
+                // --- DL ---
+                "DL Games played",
+                "DL Position",
+                "DL Solo tackles",
+                "DL Assisted tackles",
+                "DL Total tackles",
+                "DL Sacks",
+                "DL Tackles-for-loss",
+                "DL Forced fumbles",
+                "DL Fumble recoveries",
+                "DL Interceptions",
+                "DL Pass breakups",
+                "DL Other",
+                
+                // --- LB ---
+                "LB Games played",
+                "LB Position",
+                "LB Solo tackles",
+                "LB Assisted tackles",
+                "LB Total tackles",
+                "LB Sacks",
+                "LB Tackles-for-loss",
+                "LB Forced fumbles",
+                "LB Fumble recoveries",
+                "LB Interceptions",
+                "LB Pass breakups",
+                "LB Other",
+                
+                // --- DB ---
+                "DB Games played",
+                "DB Position",
+                "DB Solo tackles",
+                "DB Assisted tackles",
+                "DB Total tackles",
+                "DB Sacks",
+                "DB Tackles-for-loss",
+                "DB Forced fumbles",
+                "DB Fumble recoveries",
+                "DB Interceptions",
+                "DB Pass breakups",
+                "DB Other",
+                
+                // --- K ---
+                "K Games played",
+                "Field goals made",
+                "Field goals attempted",
+                "Longest field goal",
+                "PATs made",
+                "PATs attempted",
+                "Touchbacks",
+                "K Other",
+                
+                // --- P ---
+                "P Games played",
+                "Average yards per punt",
+                "Longest punt",
+                "Punts downed inside the 20",
+                "P Other",
+                
+                // --- General Info ---
+                "All-conference awards this year",
+                "Previous awards",
+                "College offers",
+                "College commit",
+                "Hudl or other highlight video"
+            ];
+            
+            const modalContent = document.getElementById('modalContent');
+            
+            const availableFields = fieldOrder.filter(key => {
+                const value = player[key];
+                return value !== undefined && value !== null && value !== "";
+            });
+
+            if (availableFields.length === 0) {
+                 modalContent.innerHTML = '<div class="text-gray-500 italic">No detailed stats available for this player.</div>';
+            } else {
+                modalContent.innerHTML = availableFields.map(key => {
+                    const value = player[key];
+                    
+                    if (key === "Hudl or other highlight video") {
+                        let url = String(value).trim();
+                        if (url) {
+                            if (!/^https?:\/\//i.test(url)) {
+                                url = 'https://' + url;
+                            }
+                            return `
+                                <div class="border-b border-gray-100 pb-3">
+                                    <div class="text-sm font-medium text-gray-500 mb-1">${key}</div>
+                                    <div class="text-base text-gray-900">
+                                        <a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-blue-600 hover:underline">
+                                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path></svg>
+                                            Watch Highlights
+                                        </a>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    return `
+                        <div class="border-b border-gray-100 pb-3">
+                            <div class="text-sm font-medium text-gray-500 mb-1">${key}</div>
+                            <div class="text-base text-gray-900 break-words">${value}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        fetchData();
+    </script>
+</body>
+</html>
