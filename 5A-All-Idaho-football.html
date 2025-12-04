@@ -113,7 +113,7 @@
     </div>
 
     <script>
-        const dataUrl = "https://script.googleusercontent.com/a/macros/idahostatesman.com/echo?user_content_key=AehSKLhH7GviZbuwHpjDnKjhgvhty1MaGIDLI-WnXQNJNrykh0xTodIpICFR2-8IKic9pJo55yEXi02R1CANM5l8BGPJWb8vBRVfV-GBKSsrmNOrhU6bn9liCho8FA0v13UUjyQa6oGmr_BtdGXBgzDv5LuPw8LlPo_xobDY5BRTzrZTAeLFMGoCQZoLPHDFyaIVTq-_TfwX2VWxisQ3FqnHBm_E3LgSTNXyHlGVrLhpYIB0OYW5YBbYT6w1mtnngTCDHF4HHnuwxiyElFgstq0OcBt2TBxiWqfb17J4c7mjpH346oltyouDmOzAIE3n_g&lib=M7u1fwV1q5VoS_MTgd7tWkaaDfETvgIFd";
+        const dataUrl = "https://script.googleusercontent.com/a/macros/idahostatesman.com/echo?user_content_key=AehSKLi3_z30gHXrsKc7mn7ZnsiGFK-1TtJYrcN0zsMsoYmDqYcKFrX9ZtQi5flvy-F8CBS50NXR7fGSmtj5E-n5QDo0KHthtDpg5Yhl98JvHthxeiRBUOJRoUIkiuxTv2f5T5e85N-wXjD-arD90tgMypig467BiKlYI-dULeoyhj0UOm9GpQU6s-4M1s8gggCnU4KaSWBrvqhDTYsthwRkHyUiUl57SVTfh8qp2gYBoB8Fz47w_-n1X2ewpa4r1B9jNKGaim_8I4bN-wwA_WX8UN_dcSJIEcJIrBY4iK859lVba86C6dcNJ9rrLAcPQQ&lib=M7u1fwV1q5VoS_MTgd7tWkaaDfETvgIFd";
         
         let allData = [];
         let filteredData = [];
@@ -777,50 +777,104 @@
                 "All-conference awards this year",
                 "Previous awards",
                 "College offers",
-                "College commit",
-                "Hudl or other highlight video"
+                "College commit"
             ];
-            
+
             const modalContent = document.getElementById('modalContent');
-            
+
             const availableFields = fieldOrder.filter(key => {
                 const value = player[key];
                 return value !== undefined && value !== null && value !== "";
             });
+
+            // Helper: safely escape text for insertion
+            function escapeHtml(str) {
+                return String(str).replace(/[&<>"']/g, function(m) {
+                    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m];
+                });
+            }
+
+            // Helper: normalize and validate a potential URL. Returns normalized href or null.
+            function normalizeUrlCandidate(input) {
+                let s = String(input).trim();
+                if (!s) return null;
+
+                // If it already starts with http(s), try to construct URL
+                try {
+                    if (/^https?:\/\//i.test(s)) {
+                        const u = new URL(s);
+                        return u.href;
+                    }
+                } catch (e) {
+                    // fall through to try prefixing
+                }
+
+                // Add https:// for common cases like 'www.example.com' or 'youtube.com/..'
+                if (/^www\./i.test(s) || (s.indexOf('.') !== -1 && s.indexOf(' ') === -1)) {
+                    try {
+                        const u = new URL('https://' + s);
+                        return u.href;
+                    } catch (e) {
+                        return null;
+                    }
+                }
+
+                return null;
+            }
 
             if (availableFields.length === 0) {
                  modalContent.innerHTML = '<div class="text-gray-500 italic">No detailed stats available for this player.</div>';
             } else {
                 modalContent.innerHTML = availableFields.map(key => {
                     const value = player[key];
-                    
-                    if (key === "Hudl or other highlight video") {
-                        let url = String(value).trim();
-                        if (url) {
-                            if (!/^https?:\/\//i.test(url)) {
-                                url = 'https://' + url;
-                            }
-                            return `
-                                <div class="border-b border-gray-100 pb-3">
-                                    <div class="text-sm font-medium text-gray-500 mb-1">${key}</div>
-                                    <div class="text-base text-gray-900">
-                                        <a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-blue-600 hover:underline">
-                                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path></svg>
-                                            Watch Highlights
-                                        </a>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                    }
-                    
                     return `
                         <div class="border-b border-gray-100 pb-3">
                             <div class="text-sm font-medium text-gray-500 mb-1">${key}</div>
-                            <div class="text-base text-gray-900 break-words">${value}</div>
+                            <div class="text-base text-gray-900 break-words">${escapeHtml(value)}</div>
                         </div>
                     `;
                 }).join('');
+            }
+
+            // At the end of the modal, append any highlight/video link if present in the data.
+            const videoKeys = [
+                "Link to hudl or other highlight video",
+                "Hudl or other highlight video"
+            ];
+
+            let videoValue = null;
+            for (const k of videoKeys) {
+                if (player[k] !== undefined && player[k] !== null && String(player[k]).trim() !== '') {
+                    videoValue = String(player[k]).trim();
+                    break;
+                }
+            }
+
+            if (videoValue) {
+                const normalized = normalizeUrlCandidate(videoValue);
+                let videoBlock = '';
+                if (normalized) {
+                    videoBlock = `
+                        <div class="border-b border-gray-100 pb-3">
+                            <div class="text-sm font-medium text-gray-500 mb-1">Highlight Video</div>
+                            <div class="text-base text-gray-900">
+                                <a href="${normalized}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-blue-600 hover:underline">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path></svg>
+                                    Watch Highlights
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    videoBlock = `
+                        <div class="border-b border-gray-100 pb-3">
+                            <div class="text-sm font-medium text-gray-500 mb-1">Highlight Video</div>
+                            <div class="text-base text-gray-900 break-words">${escapeHtml(videoValue)}</div>
+                        </div>
+                    `;
+                }
+
+                modalContent.innerHTML += videoBlock;
             }
             
             document.getElementById('modal').style.display = 'flex';
